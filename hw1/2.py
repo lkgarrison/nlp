@@ -6,15 +6,19 @@ from collections import Counter, defaultdict
 from scipy.misc import logsumexp
 import math
 import random
+import argparse
+from stemming.porter2 import stem
 
-if len(sys.argv) < 3:
-    print("Please specify a training file and a test data file")
-    print("Example usage:")
-    print("python3.5 1.py <training file> <test file>")
-    sys.exit(1)
+parser = argparse.ArgumentParser(description='Use logistic regression to predict which candidate said each speech')
+parser.add_argument("training_file", type=str, help="A training file to train the model")
+parser.add_argument("testing_file", type=str, help="A testing file to run against the model")
+parser.add_argument("--stems", action='store_true', help="Uses word stems instead of raw words in model")
 
-training_filename = sys.argv[1]
-testing_filename = sys.argv[2]
+args = parser.parse_args()
+
+training_filename = args.training_file
+testing_filename = args.testing_file
+use_stems = args.stems
 
 def get_list_of_candidates(training_filename):
     set_of_candidates = set()
@@ -52,6 +56,8 @@ def get_model_accuracy(model, testing_filename):
         for doc in f:
             actual_candidate = doc.split()[0]
             doc = doc.split()[1:]
+            if use_stems:
+                doc = [stem(word) for word in doc]
 
             if total_docs == 0:
                 print("p(k | d) for each candidate for first document:")
@@ -109,6 +115,8 @@ def build_model(training_filename, model):
 
             # add the word '<bias>' once to each document in order to calculate lambda(k)
             doc[0] = '<bias>'
+            if use_stems:
+                doc = [stem(word) for word in doc]
 
             # get the p(k | d) for each candidate
             p_k_given_d_dict = dict()

@@ -13,12 +13,14 @@ parser = argparse.ArgumentParser(description='Use logistic regression to predict
 parser.add_argument("training_file", type=str, help="A training file to train the model")
 parser.add_argument("testing_file", type=str, help="A testing file to run against the model")
 parser.add_argument("--stems", action='store_true', help="Uses word stems instead of raw words in model")
+parser.add_argument("--no_stop_words", action='store_true', help="Ignores stop words in the model")
 
 args = parser.parse_args()
 
 training_filename = args.training_file
 testing_filename = args.testing_file
 use_stems = args.stems
+no_stop_words = args.no_stop_words
 
 def get_list_of_candidates(training_filename):
     set_of_candidates = set()
@@ -58,6 +60,8 @@ def get_model_accuracy(model, testing_filename):
             doc = doc.split()[1:]
             if use_stems:
                 doc = [stem(word) for word in doc]
+            if no_stop_words:
+                doc = remove_stop_words(doc)
 
             if total_docs == 0:
                 print("p(k | d) for each candidate for first document:")
@@ -98,6 +102,13 @@ def get_sum_neg_log_probability_of_train(training_filename, model):
     return sum_log_p
 
 
+# removes stop words from the given doc
+def remove_stop_words(doc):
+    stop_words = set(['a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 'has', 'he', 'in', 'is', 'it', 'its', 'of', 'on', 'that', 'the', 'to', 'was', 'were', 'will', 'with'])
+
+    return [word for word in doc if word not in stop_words]
+
+
 def build_model(training_filename, model):
     num_iterations = 15
     learning_rate = .07
@@ -117,6 +128,8 @@ def build_model(training_filename, model):
             doc[0] = '<bias>'
             if use_stems:
                 doc = [stem(word) for word in doc]
+            if no_stop_words:
+                doc = remove_stop_words(doc)
 
             # get the p(k | d) for each candidate
             p_k_given_d_dict = dict()

@@ -59,7 +59,7 @@ def get_model_accuracy(model, testing_filename):
             actual_candidate = doc.split()[0]
             doc = doc.split()[1:]
             if use_stems:
-                doc = [stem(word) for word in doc]
+                doc = get_word_stems(doc)
             if no_stop_words:
                 doc = remove_stop_words(doc)
 
@@ -109,6 +109,11 @@ def remove_stop_words(doc):
     return [word for word in doc if word not in stop_words]
 
 
+# given a doc, returns the doc but replaces each word with its stem
+def get_word_stems(doc):
+	return [stem(word) for word in doc]
+
+
 def build_model(training_filename, model):
     num_iterations = 15
     learning_rate = .07
@@ -127,7 +132,7 @@ def build_model(training_filename, model):
             # add the word '<bias>' once to each document in order to calculate lambda(k)
             doc[0] = '<bias>'
             if use_stems:
-                doc = [stem(word) for word in doc]
+                doc = get_word_stems(doc)
             if no_stop_words:
                 doc = remove_stop_words(doc)
 

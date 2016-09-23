@@ -5,12 +5,28 @@ import sys
 from collections import Counter, defaultdict
 from scipy.misc import logsumexp
 import math
+import argparse
+from stemming.porter2 import stem
 
-if len(sys.argv) < 3:
-    print("Please specify a training file and a test data file")
-    print("Example usage:")
-    print("python3.5 1.py <training file> <test file>")
-    sys.exit(1)
+parser = argparse.ArgumentParser(description='Use Naive Bayes to predict which candidate said each speech')
+parser.add_argument("training_file", type=str, help="A training file to train the model")
+parser.add_argument("testing_file", type=str, help="A testing file to run against the model")
+parser.add_argument("--stems", action='store_true', help="Uses word stems instead of raw words in model")
+parser.add_argument("--no_stop_words", action='store_true', help="Ignores stop words in the model")
+
+args = parser.parse_args()
+
+training_filename = args.training_file
+testing_filename = args.testing_file
+use_stems = args.stems
+no_stop_words = args.no_stop_words
+
+
+# removes stop words from the given doc
+def remove_stop_words(doc):
+    stop_words = set(['a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'for', 'from', 'has', 'he', 'in', 'is', 'it', 'its', 'of', 'on', 'that', 'the', 'to', 'was', 'were', 'will', 'with'])
+
+    return [word for word in doc if word not in stop_words]
 
 
 # get counts c(k) and c(k, w) for all k
@@ -21,16 +37,20 @@ def get_counts(filename):
     word_counts_per_candidate = defaultdict(Counter)
 
     with open(filename) as f:
-        for line in f:
-            current_candidate = str()
-            for word_index, word in enumerate(line.split()):
-                if word_index == 0:
-                    current_candidate = word
-                    # update the counter for the current candidate
-                    document_counts_per_candidate.update({current_candidate: 1})
+        for doc in f:
+            current_candidate = doc.split()[0]
+            # update the counter for the current candidate
+            document_counts_per_candidate.update({current_candidate: 1})
 
-                else:
-                    word_counts_per_candidate[current_candidate].update({word: 1})
+            doc = doc.split()[1:]
+
+            if use_stems:
+                doc = [stem(word) for word in doc]
+            if no_stop_words:
+                doc = remove_stop_words(doc)
+
+            for word in doc:
+                word_counts_per_candidate[current_candidate].update({word: 1})
 
         return (document_counts_per_candidate, word_counts_per_candidate)
 
@@ -86,7 +106,7 @@ def get_dict_probability_word_given_candidate(word_counts_per_candidate, probabi
 def get_log_p_candidate_and_doc(candidate, doc, candidate_probabilities, dict_p_word_given_candidate):
     sum_p = math.log(candidate_probabilities[candidate])
 
-    for word in doc.split():
+    for word in doc:
         if word in dict_p_word_given_candidate[candidate]:
             sum_p += math.log(dict_p_word_given_candidate[candidate][word])
         else:
@@ -117,13 +137,20 @@ def predict_candidates(test_data_file, candidate_probabilities, dict_p_word_give
         total_correct = 0
         num_docs = 0
         for doc in f:
+            correct_candidate = doc.split()[0]
+            doc = doc.split()[1:]
+
+            if use_stems:
+                doc = [stem(word) for word in doc]
+            if no_stop_words:
+                doc = remove_stop_words(doc)
+
             num_docs += 1
             predicted_candidate = predict_candidate_given_doc(doc, candidate_probabilities, dict_p_word_given_candidate)
-            if predicted_candidate == doc.split()[0]:
+            if predicted_candidate == correct_candidate:
                 total_correct += 1
 
         print("accuracy:", total_correct / num_docs * 100, "%")
-
 
 
 # add one to the count of each word for each candidate
@@ -146,7 +173,7 @@ def get_probabily_unknown(word_counts_per_candidate):
 
 
 if __name__ == "__main__":
-    document_counts_per_candidate, word_counts_per_candidate = get_counts(sys.argv[1])
+    document_counts_per_candidate, word_counts_per_candidate = get_counts(training_filename)
 
     # smoothing
     add_one_smoothing(word_counts_per_candidate)
@@ -158,7 +185,7 @@ if __name__ == "__main__":
     dict_p_word_given_candidate = get_dict_probability_word_given_candidate(word_counts_per_candidate, probability_unknown)
 
 
-    predict_candidates(sys.argv[2], candidate_probabilities, dict_p_word_given_candidate)
+    predict_candidates(testing_filename, candidate_probabilities, dict_p_word_given_candidate)
 
     # 1a
     # *********************

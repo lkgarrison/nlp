@@ -22,6 +22,8 @@ class Context():
 	# clears the context deque
 	def reset(self):
 		self.context.clear()
+		start_symbols = ['<s>' for i in range(self.context_length)]
+		self.context.extend(start_symbols)
 
 	# convert content of context deque to a string
 	def __str__(self):

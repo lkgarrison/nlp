@@ -46,7 +46,8 @@ class Model(object):
 		self.counts = defaultdict(lambda: defaultdict(Counter))
 
 		with open(filename) as f:
-			filedata = f.read().splitlines()
+			# split on newlines but keep them in the lines
+			filedata = f.read().splitlines(1)
 
 		for m in range(self.mgrams + 1):
 			print("training model on %s-gram" % (m))

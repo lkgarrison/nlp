@@ -6,13 +6,8 @@ import sys
 import argparse
 from collections import defaultdict, Counter
 
-# hw4_data was provided for this assignment
+# hw4_utilities was provided for this assignment
 from hw4_utilities.tree import Tree
-
-parser = argparse.ArgumentParser(description='Builds a probabilistic CFG by reading in trees and counting all of the rules')
-parser.add_argument("trees_file", type=str, help="File containing trees with CFG rules")
-
-args = parser.parse_args()
 
 
 def count_rules(trees_file):
@@ -67,7 +62,7 @@ def count_tree_rules(root, rule_counts):
 		count_tree_rules(root.children[0], rule_counts)
 		count_tree_rules(root.children[1], rule_counts)
 	elif len(root.children) == 1:
-		# leaf node
+		# leaf node, terminal
 		rule_counts[root.label][root.children[0].label] += 1
 
 
@@ -91,6 +86,11 @@ def display_most_common_rules(rule_counts, label='probability'):
 
 
 if __name__ == '__main__':
+	parser = argparse.ArgumentParser(description='Builds a probabilistic CFG by reading in trees and counting all of the rules')
+	parser.add_argument("trees_file", type=str, help="File containing trees with CFG rules")
+
+	args = parser.parse_args()
+
 	trees_file = args.trees_file
 
 	if trees_file is None:

@@ -98,7 +98,13 @@ if __name__ == '__main__':
 		sys.exit(1)
 
 	rule_counts = count_rules(trees_file)
-	print('Number of unique rules:', len(rule_counts))
+
+	num_unique_rules = 0
+	for left_side in rule_counts:
+		for right_side in rule_counts[left_side]:
+			num_unique_rules += 1
+
+	print('Number of unique rules:', num_unique_rules)
 	print('The top 5 most frequent rules:')
 	display_most_common_rules(rule_counts, 'count')
 

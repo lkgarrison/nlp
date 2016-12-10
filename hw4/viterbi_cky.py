@@ -15,96 +15,50 @@ import get_probabilistic_cfg as get_cfg
 
 def parse_lines(trees_file, sentences_file, probabilistic_cfg):
 	terminals, nonterminals = get_terminals_nonterminals(trees_file)
-	# print(terminals)
-	# print()
-	# print(nonterminals)
 
-	outfile = open("dev.parses", "w")
-	
+	parse_tree_outfile = 'dev.parses'
+
+	outfile = open(parse_tree_outfile, "w")
 
 	with open(sentences_file) as f:
 		for line_index, line in enumerate(f):
-			if line_index == 0:
-				line = line.strip()
-				# line = 'Does this flight server dinner ?' 
-				print(len(line.split(' ')))
-				print(line)	
-				final_cell_entry, back_pointers = viterbi_cky(line, probabilistic_cfg, terminals, nonterminals)
-				# labels = dict()
-				# get_parsed_line(final_cell_entry, back_pointers, labels)
+			line = line.strip()
+			final_back_pointer, back_pointers = viterbi_cky(line, probabilistic_cfg, terminals, nonterminals)
+			if final_back_pointer[2] is None:
+				# the line was unable to be parsed
+				outfile.write('\n')
+			else:
 				tree_list = list()
-				tree_list.append("(TOP")
-				get_tree_list(final_cell_entry, back_pointers, line.split(' '), tree_list)
-				tree_list.append(")")
-				# print(''.join(tree_list))
+				get_tree_list(final_back_pointer, back_pointers, line.split(' '), tree_list)
 				outfile.write(''.join(tree_list) + '\n')
 
-				# for k in labels:
-				# 	print(k, labels[k])
-
 	outfile.close()
+	print("parser output located in:", parse_tree_outfile)
 
 
-def get_tree_list(cell_entry, back_pointers, sentence_list, tree_list):
-	cell = back_pointers[cell_entry[0]][cell_entry[1]][cell_entry[2]]
-	# print('(', end="")
+def get_tree_list(back_pointer, back_pointers, sentence_list, tree_list):
+	cell = back_pointers[back_pointer[0]][back_pointer[1]][back_pointer[2]]
+
+	# if cell contains a string, it is a terminal corresponding to a word
 	if isinstance(cell, str):
-		# print('here 1')
-		# print(cell)
-		# print(cell_entry)
-		# print('here 2')
-		# print()
-		# print(cell_entry[2], sentence_list[cell_entry[0]], end="")
 		tree_list.append('(')
-		tree_list.append(cell_entry[2] + " " + sentence_list[cell_entry[0]])
+		tree_list.append(back_pointer[2] + " " + sentence_list[back_pointer[0]])
 		tree_list.append(")")
-		# labels[cell_entry[0]] = cell_entry[2]
 	else:
-		# print(cell[0][2])
 		tree_list.append('(')
-		tree_list.append(cell[0][2])
+		tree_list.append(back_pointer[2] + " ")
 		get_tree_list(cell[0], back_pointers, sentence_list, tree_list)
-		tree_list.append(")")
-		# print(cell[1][2])
-		tree_list.append('(')
-		tree_list.append(cell[1][2])
 		get_tree_list(cell[1], back_pointers, sentence_list, tree_list)
 		tree_list.append(")")
 	
-	# print(")")
-
-
-def get_parsed_line(cell_entry, back_pointers, labels):
-	cell = back_pointers[cell_entry[0]][cell_entry[1]][cell_entry[2]]
-	if isinstance(cell, str):
-		print('here 1')
-		# print(cell)
-		print(cell_entry)
-		print('here 2')
-		print()
-		labels[cell_entry[0]] = cell_entry[2]
-	else:
-		print(cell)
-		get_parsed_line(cell[0], back_pointers, labels)
-		get_parsed_line(cell[1], back_pointers, labels)
-
-
 
 def viterbi_cky(sentence, probabilistic_cfg, terminals, nonterminals):
 	# best = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: float())))
 	best = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: float('-inf'))))
 	back_pointers = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: None)))
 
-	# sentence_length = len(sentence)
-	sentence_length = len(sentence.split(' '))
-	# print(terminals['<unk>'])
-
-	# initialization
-	# for i in range(sentence_length + 1):
-	# 	for j in range(sentence_length + 1):
-	# 		for X in nonterminals:
-	# 			best[i][j][X] = 0
-	# 			back_pointers[i][j][X] = None
+	sentence = sentence.split(' ')
+	sentence_length = len(sentence)
 
 	# find all X such that X --> wi (x produces a terminal)
 	nonterminals_producing_terminals = set()
@@ -126,25 +80,20 @@ def viterbi_cky(sentence, probabilistic_cfg, terminals, nonterminals):
 		else:
 			terminal = word
 
-		for X in nonterminals_producing_terminals:
-			for terminal in probabilistic_cfg[X]:
-				# ensure that this rule produces a terminal
-				if len(terminal.split(' ')) > 1:
-					continue
+		for X in probabilistic_cfg:
+			# looking for rules in the form X --> wi
+			if terminal not in probabilistic_cfg[X]:
+				continue
 
-				if X not in probabilistic_cfg:
-					print("X:", X, "not in probabilistic cfg")
-				if terminal not in probabilistic_cfg[X]:
-					print("terminal:", termainal, "not in probabilistic cfg")
+			# ensure that this rule produces a terminal
+			if len(terminal.split(' ')) > 1:
+				continue
 
+			p = math.log10(probabilistic_cfg[X][terminal])
+			if p > best[i-1][i][X]:
+				best[i-1][i][X] = p
 
-				p = math.log10(probabilistic_cfg[X][terminal])
-				if p > best[i-1][i][X] or best[i-1][i][X] == 0:
-					best[i-1][i][X] = p
-
-					# TODO: what is the value????
-					# back_pointers[i-1][i][X] = (i-1, i, X)
-					back_pointers[i-1][i][X] = word
+				back_pointers[i-1][i][X] = word
 
 
 	for l in range(2, sentence_length + 1):
@@ -159,9 +108,9 @@ def viterbi_cky(sentence, probabilistic_cfg, terminals, nonterminals):
 
 						Y, Z = right_side.split(' ')
 						p = math.log10(probabilistic_cfg[X][right_side])
-						p_prime = p * best[i][k][Y] * best[k][j][Z]
+						p_prime = p + best[i][k][Y] + best[k][j][Z]
 
-						if p_prime > best[i][j][X] or best[i][j][X] == 0:
+						if p_prime > best[i][j][X]:
 							best[i][j][X] = p_prime
 							back_pointers[i][j][X] = ((i, k, Y), (k, j, Z))
 
@@ -169,27 +118,13 @@ def viterbi_cky(sentence, probabilistic_cfg, terminals, nonterminals):
 	final_cell_indices = 0, sentence_length
 	final_cell = best[final_cell_indices[0]][final_cell_indices[1]]
 
-	print(final_cell)
+	# print(final_cell)
 	max_prob = -float('inf')
 	max_prob_label = None
 	for X in final_cell:
 		if final_cell[X] > max_prob: 
 			max_prob = final_cell[X]
 			max_prob_label = X
-
-	print(max_prob_label, max_prob)
-
-	# for i in range(sentence_length + 1):
-	# 	for j in range(sentence_length + 1):
-	# 		# print(i, j, best[i][j])
-	# 		for X in best[i][j]:
-	# 			if best[i][j][X]:
-	# 				print("p(", i, j, X, " )=", best[i][j][X])
-
-	# print(best)
-	# print()
-	# print()
-	# print(back_pointers)
 
 	return (final_cell_indices[0], final_cell_indices[1], max_prob_label), back_pointers
 

@@ -5,6 +5,7 @@
 import sys
 import math
 import argparse
+from timeit import default_timer as timer
 from collections import defaultdict, Counter
 
 # hw4_utilities was provided for this assignment
@@ -13,24 +14,48 @@ from hw4_utilities.tree import Tree
 import get_probabilistic_cfg as get_cfg
 
 
-def parse_lines(trees_file, sentences_file, probabilistic_cfg):
-	terminals, nonterminals = get_terminals_nonterminals(trees_file)
-
+def parse_lines(trees_file, sentences_file, probabilistic_cfg, probabilistic_cfg_vm):
 	parse_tree_outfile = 'dev.parses'
 
 	outfile = open(parse_tree_outfile, "w")
 
+	print('Output of parser on first five lines, along with their log10 probabilities:')
+
 	with open(sentences_file) as f:
 		for line_index, line in enumerate(f):
 			line = line.strip()
-			final_back_pointer, back_pointers = viterbi_cky(line, probabilistic_cfg, terminals, nonterminals)
-			if final_back_pointer[2] is None:
-				# the line was unable to be parsed
-				outfile.write('\n')
+			tree_list = list()
+			tree_string = str()
+
+			# try with vertical markovization and standard parsing
+			final_back_pointer_vm, back_pointers_vm, best_vm = viterbi_cky(line, probabilistic_cfg_vm)
+			final_back_pointer_std, back_pointers_std, best_std = viterbi_cky(line, probabilistic_cfg)
+
+			# if both vertical markovizatin and standard were possible, use the parse with the larger probability
+			if final_back_pointer_vm[2] is None and final_back_pointer_std[2] is not None:
+				get_tree_list(final_back_pointer_std, back_pointers_std, line.split(' '), tree_list)
+				tree_string = ''.join(tree_list)
+			elif final_back_pointer_std[2] is None and final_back_pointer_vm[2] is not None:
+				get_tree_list(final_back_pointer_vm, back_pointers_vm, line.split(' '), tree_list)
+				t = Tree.from_str(''.join(tree_list))
+				t.undo_vertical_markovization()
+				tree_string = str(t)
+			elif final_back_pointer_std[2] is not None and final_back_pointer_vm[2] is not None and final_back_pointer_std[2] > final_back_pointer_vm[2]:
+				get_tree_list(final_back_pointer_std, back_pointers_std, line.split(' '), tree_list)
+				tree_string = ''.join(tree_list)
+			elif final_back_pointer_std[2] is not None and final_back_pointer_vm[2] is not None and final_back_pointer_std[2] <= final_back_pointer_vm[2]:
+				get_tree_list(final_back_pointer_vm, back_pointers_vm, line.split(' '), tree_list)
+				t = Tree.from_str(''.join(tree_list))
+				t.undo_vertical_markovization()
+				tree_string = str(t)
 			else:
-				tree_list = list()
-				get_tree_list(final_back_pointer, back_pointers, line.split(' '), tree_list)
-				outfile.write(''.join(tree_list) + '\n')
+				# unable to parse the line
+				pass
+
+			tree_string += '\n'
+
+			outfile.write(tree_string)
+
 
 	outfile.close()
 	print("parser output located in:", parse_tree_outfile)
@@ -52,7 +77,7 @@ def get_tree_list(back_pointer, back_pointers, sentence_list, tree_list):
 		tree_list.append(")")
 	
 
-def viterbi_cky(sentence, probabilistic_cfg, terminals, nonterminals):
+def viterbi_cky(sentence, probabilistic_cfg):
 	# best = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: float())))
 	best = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: float('-inf'))))
 	back_pointers = defaultdict(lambda: defaultdict(lambda: defaultdict(lambda: None)))
@@ -66,13 +91,16 @@ def viterbi_cky(sentence, probabilistic_cfg, terminals, nonterminals):
 	# find all X such that X --> Y Z (x produces two nonterminals)
 	nonterminals_producing_nonterminals = set()
 
+	terminals = set()
+
 	for left_side in probabilistic_cfg:
 		for right_side in probabilistic_cfg[left_side]:
 			if len(right_side.split(' ')) == 1:
 				nonterminals_producing_terminals.add(left_side)
+				terminals.add(right_side)
 			elif len(right_side.split(' ')) == 2:
 				nonterminals_producing_nonterminals.add(left_side)
-	
+
 	for i in range(1, sentence_length + 1):
 		word = sentence[i-1]
 		if word not in terminals:
@@ -100,7 +128,7 @@ def viterbi_cky(sentence, probabilistic_cfg, terminals, nonterminals):
 		for i in range(0, sentence_length - l + 1):
 			j = i + l
 			for k in range(i + 1, j):
-				for X in nonterminals:
+				for X in probabilistic_cfg:
 					for right_side in probabilistic_cfg[X]:
 						# ensure that this rule produces a nonterminal
 						if len(right_side.split(' ')) != 2:
@@ -118,7 +146,6 @@ def viterbi_cky(sentence, probabilistic_cfg, terminals, nonterminals):
 	final_cell_indices = 0, sentence_length
 	final_cell = best[final_cell_indices[0]][final_cell_indices[1]]
 
-	# print(final_cell)
 	max_prob = -float('inf')
 	max_prob_label = None
 	for X in final_cell:
@@ -126,41 +153,7 @@ def viterbi_cky(sentence, probabilistic_cfg, terminals, nonterminals):
 			max_prob = final_cell[X]
 			max_prob_label = X
 
-	return (final_cell_indices[0], final_cell_indices[1], max_prob_label), back_pointers
-
-
-def get_terminals_nonterminals(trees_file):
-	""" get a set of the terminals and non-terminals """
-	termainals = set()
-	nonterminals = set()
-
-	with open(trees_file) as f:
-		for index, line in enumerate(f):
-			line = line.strip()
-			t = Tree.from_str(line)
-
-			get_terminals_nonterminals_helper(t.root, termainals, nonterminals)
-	
-	return termainals, nonterminals
-
-
-def get_terminals_nonterminals_helper(root, terminals, nonterminals):
-	""" recursively iterate over the tree and add terminals, nonterminals to sets as they are found """
-	if root is None:
-		return
-
-	nonterminals.add(root.label)
-
-	if len(root.children) == 2:
-		# 2 non-terminals
-		right_side = ' '.join(node.label for node in root.children)
-
-		# recurse on left and right children
-		get_terminals_nonterminals_helper(root.children[0], terminals, nonterminals)
-		get_terminals_nonterminals_helper(root.children[1], terminals, nonterminals)
-	elif len(root.children) == 1:
-		# leaf node, terminal
-		terminals.add(root.children[0].label)
+	return (final_cell_indices[0], final_cell_indices[1], max_prob_label), back_pointers, best
 
 
 if __name__ == '__main__':
@@ -176,4 +169,7 @@ if __name__ == '__main__':
 	rule_counts = get_cfg.count_rules(trees_file)
 	probabilistic_cfg = get_cfg.get_probabilistic_cfg(rule_counts)
 
-	parse_lines(trees_file, sentences_file, probabilistic_cfg)
+	rule_counts_vertical_markovization = get_cfg.count_rules_vertical_markovization(trees_file)
+	probabilistic_cfg_vm = get_cfg.get_probabilistic_cfg(rule_counts_vertical_markovization)
+
+	parse_lines(trees_file, sentences_file, probabilistic_cfg, probabilistic_cfg_vm)

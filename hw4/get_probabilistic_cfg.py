@@ -10,6 +10,25 @@ from collections import defaultdict, Counter
 from hw4_utilities.tree import Tree
 
 
+def count_rules_vertical_markovization(trees_file):
+	""" Applies vertical markovization to the tree
+	    Returns a dictionary of Counters where the key of the outer dictionary is the left
+	    half of the rule and the key of the inner dictionary is the right half of the rule.
+	    The value of the inner dictionary is the number of times this rule was seen
+	"""
+	rule_counts = defaultdict(Counter)
+
+	with open(trees_file) as f:
+		for index, line in enumerate(f):
+			line = line.strip()
+			t = Tree.from_str(line)
+			t.vertical_markovization()
+
+			count_tree_rules(t.root, rule_counts)
+
+	return rule_counts
+
+
 def count_rules(trees_file):
 	""" Returns a dictionary of Counters where the key of the outer dictionary is the left
 	    half of the rule and the key of the inner dictionary is the right half of the rule.
@@ -44,12 +63,12 @@ def get_probabilistic_cfg(rule_counts):
 	return probabilistic_cfg
 
 
-def display_cfg(rule_counts, label='probability'):
+def display_cfg(cfg, label='probability'):
 	""" Displays the CFG encoded as a dictionary of dictionaries
 	"""
-	for left_side in rule_counts:
-		for right_side in rule_counts[left_side]:
-			print(left_side, '-->', right_side, '   ' + label + ":", rule_counts[left_side][right_side])
+	for left_side in cfg:
+		for right_side in cfg[left_side]:
+			print(left_side, '-->', right_side, '   ' + label + ":", cfg[left_side][right_side])
 
 
 def count_tree_rules(root, rule_counts):

@@ -5,6 +5,9 @@
 import math
 import random
 import itertools
+import argparse
+import sys
+import os
 from collections import defaultdict
 
 ENGLISH_FIRST_WORD = 'NULL'
@@ -93,12 +96,39 @@ def reset_t_f_given_e_cache():
 	# reset cache of t(f | e)
 	t_f_given_e_cache = defaultdict(lambda: dict())
 
-def delete_from_cache(english_word, chinese_word):
-	global t_f_given_e_cache
 
-	if chinese_word in t_f_given_e_cache[english_word]:
-		# deleted from cache upon lambda updating
-		del t_f_given_e_cache[english_word][chinese_word]
+def align_words(lambda_f_given_e, training_file, alignments_output_file):
+	training_data = get_training_data(training_file)
+	print('The alignments for the first five lines:')
+
+	with open(alignments_output_file, 'w') as alignments_outfile:
+		# for each sentence
+		for index, line in enumerate(training_data):
+			chinese_sentence, english_sentence = line
+
+			alignment_list = list()
+			for j, chinese_word in enumerate(chinese_sentence):
+				max_t_f_given_e = -1.0
+				most_likely_english_word_index = None
+				for i, english_word in enumerate(english_sentence):
+					t_f_given_e = get_t_f_given_e(lambda_f_given_e, chinese_word, english_word)
+					if t_f_given_e > max_t_f_given_e:
+						max_t_f_given_e = t_f_given_e
+						most_likely_english_word_index = i
+
+				# write out the predicted alignmnet
+				if most_likely_english_word_index > 0:
+					# alignments_outfile.write(str(j) + '-' + str(most_likely_english_word_index-1))
+					alignment_list.append(str(j) + '-' + str(most_likely_english_word_index-1))
+
+					if j < len(chinese_sentence) - 1:
+						alignment_list.append(' ')
+
+			alignments_outfile.write(''.join(alignment_list) + '\n')
+
+			if index < 5:
+				print(''.join(alignment_list))
+
 
 
 def train_model(training_file):
@@ -120,7 +150,7 @@ def train_model(training_file):
 
 		# for each sentence
 		for index, line in enumerate(training_data):
-			if index % 200 == 0:
+			if index % 400 == 0:
 				reset_t_f_given_e_cache()
 
 			chinese_sentence, english_sentence = line
@@ -151,7 +181,22 @@ def train_model(training_file):
 		print('t("你 | yousa") =', get_t_f_given_e(lambda_f_given_e, '你', 'yousa'))
 		print()
 
+	return lambda_f_given_e
+
 
 if __name__ == '__main__':
-	train_model('data/episode1.zh-en')
+	parser = argparse.ArgumentParser(description='Word alignment between Chinese and English translations of Star Wars. Uses unsupervised learning and stochastic gradient descent to predict the English word that each Chinese word corresponds to')
+	parser.add_argument("training_file", type=str, help="A training file to train the model")
+	parser.add_argument("alignments_output_file", type=str, help="A file to write the predicted alignments to")
+
+	args = parser.parse_args()
+	training_file = args.training_file
+	alignments_output_file = args.alignments_output_file
+
+	if not os.path.isfile(training_file):
+		print("Training file does not exist")
+		sys.exit(1)
+
+	lambda_f_given_e = train_model(training_file)
+	align_words(lambda_f_given_e, training_file, alignments_output_file)
 
